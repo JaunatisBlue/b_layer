@@ -54,19 +54,35 @@ class SemanticGenerator:
 
     def _build_prompt(self, events: List[Dict], context: Dict) -> str:
         event_desc = []
+        speech_texts = []
         for e in events:
             ts = e['time']['start_ts']
             if e['event_type'] == 'face_detection' and 'resolved_alias' in e:
                 event_desc.append(f"- {ts}: 检测到{e['resolved_alias']}的人脸")
             elif e['event_type'] == 'speech_segment':
-                event_desc.append(f"- {ts}: 语音活动")
+                text = e['payload'].get('text', '')
+                alias = e.get('resolved_alias', '未知')
+                event_desc.append(f"- {ts}: {alias}说话: {text}")
+                if text:
+                    speech_texts.append(text)
 
-        return f"""当前上下文：
-- 场景：{context['scene_label']}
-- 人物：{', '.join(context['active_persons'])}
+        return f"""分析以下对话场景，生成语义事件摘要。
+
+场景：{context['scene_label']}
+人物：{', '.join(context['active_persons'])}
 
 事件序列：
 {chr(10).join(event_desc)}
 
-请生成JSON格式输出：
-{{"summary": "一句话描述", "dialogue_act": "request/promise/complaint/greeting/status_update/unknown"}}"""
+对话内容：{' '.join(speech_texts)}
+
+根据对话内容判断dialogue_act类型：
+- request: 请求、询问、寻求帮助
+- promise: 承诺、保证、答应做某事
+- complaint: 抱怨、不满、负面情绪
+- greeting: 问候、打招呼、告别
+- status_update: 陈述事实、汇报状态、描述情况
+- unknown: 无法判断
+
+输出JSON格式：
+{{"summary": "用一句话概括对话内容和意图", "dialogue_act": "选择最合适的类型"}}"""

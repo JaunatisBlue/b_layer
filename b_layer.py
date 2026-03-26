@@ -32,9 +32,14 @@ def main():
             context_mgr.update(event)
 
             if event['event_type'] == 'face_detection':
-                embedding = event['payload']['face_embedding']['vector']
-                alias_id = tracker.match_or_create(embedding)
+                face_emb = event['payload']['face_embedding']['vector']
+                alias_id = tracker.match_or_create(face_emb, 'face')
                 event['resolved_alias'] = alias_id
+            elif event['event_type'] == 'speech_segment':
+                voice_emb = event['payload'].get('voice_embedding', {}).get('vector')
+                if voice_emb:
+                    alias_id = tracker.match_or_create(voice_emb, 'voice')
+                    event['resolved_alias'] = alias_id
 
             aggregator.add_event(event)
 
@@ -49,19 +54,22 @@ def main():
                 last_event = window_events[-1]
 
                 primary_alias = None
-                primary_embedding = None
+                face_embedding = None
+                voice_embedding = None
                 for e in window_events:
                     if 'resolved_alias' in e:
-                        primary_alias = e['resolved_alias']
-                        if e['event_type'] == 'face_detection':
-                            primary_embedding = e['payload']['face_embedding']['vector']
-                        break
+                        if not primary_alias:
+                            primary_alias = e['resolved_alias']
+                        if e['event_type'] == 'face_detection' and not face_embedding:
+                            face_embedding = e['payload']['face_embedding']['vector']
+                        elif e['event_type'] == 'speech_segment' and not voice_embedding:
+                            voice_embedding = e['payload'].get('voice_embedding', {}).get('vector')
 
                 semantic_event = {
                     'semantic_event_id': str(uuid.uuid4()),
                     'temp_alias_id': primary_alias,
-                    'face_embedding': primary_embedding,
-                    'voice_embedding': None,
+                    'face_embedding': face_embedding,
+                    'voice_embedding': voice_embedding,
                     'time': {
                         'start_ts': first_event['time']['start_ts'],
                         'end_ts': last_event['time']['end_ts']
